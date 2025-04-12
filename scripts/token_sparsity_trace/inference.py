@@ -8,14 +8,19 @@ DTYPE = torch.float16
 torch.set_default_dtype(DTYPE)
 tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 
+PAGE_SIZE = 16
+MAX_SEQ_LEN = 8192
+
 RUNTIME_CFGS = [
     "quest",
     "hg",
     ]
 
 parser = argparse.ArgumentParser()
+
 parser.add_argument("--method", choices=RUNTIME_CFGS, default="quest")
-parser.add_argument("--token_budget", type=int, default=1024)
+parser.add_argument("--token_budget", type=int, default=64)
+parser.add_argument("")
 args = parser.parse_args()
 
 if args.method == "quest":
@@ -23,7 +28,8 @@ if args.method == "quest":
     model = LlamaForCausalLM.from_pretrained(MODEL_PATH, device_map=DEVICE, torch_dtype=DTYPE)
 
     # Init Quest Controller
-    model.quest_init(page_size=16, max_seq_len=8192, token_budget=args.token_budget)
+    model.quest_init(page_size=PAGE_SIZE, max_seq_len=MAX_SEQ_LEN, token_budget=args.token_budget)
+    print(f"Page Size: {PAGE_SIZE}\nMax Seq Len: {MAX_SEQ_LEN}")
 else:
     from transformers import LlamaForCausalLM
     model = LlamaForCausalLM.from_pretrained(MODEL_PATH, device_map=DEVICE, torch_dtype=DTYPE)
@@ -38,4 +44,4 @@ generate_ids = model.generate(
                             max_length=2048,
                             use_cache=True # Managed by our InferenceController
                             )
-print(tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
+print("output: ", tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])

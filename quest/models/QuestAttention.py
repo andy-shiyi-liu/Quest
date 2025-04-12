@@ -148,6 +148,14 @@ class QuestAttention(nn.Module):
                 torch.cuda.nvtx.range_pop()
 
                 torch.cuda.nvtx.range_push("approx_attn")
+                # with open("/fact_home/shiyiliu/coding/Quest/scripts/token_sparsity_trace/tmp/test.log", "w") as f:
+                #     f.write(f"layer_idx: {self.layer_idx}, topk_dindices_buffer: {iController.topk_dindices_buffer}\n")
+                print("-"* 20)
+                print(f"layer_idx: {self.layer_idx}")
+                print("paged_kv_indices: ", iController.topk_dindices_buffer)
+                print("paged_kv_indptr: ", iController.kv_indptr_for_approx_decode)
+                print("paged_kv_last_page_len: ", iController.kv_cache.last_page_len)
+                print("paged_kv_last_page_idx: ", iController.kv_last_page_idx)
                 attn_output = quest.utils.decode_sparse_attn(
                     query_states,
                     iController,
