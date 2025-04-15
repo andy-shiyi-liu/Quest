@@ -21,11 +21,13 @@ def inference(model, tokenizer, prompt, max_length, device):
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
     print(f"Input Sequence Length: {inputs.input_ids.shape[1]}")
 
-    generate_ids = model.generate(
-        inputs.input_ids,
-        max_length=max_length,  # Now configurable via CLI
-        use_cache=True  # Managed by InferenceController
-    )
+    with torch.no_grad():
+        generate_ids = model.generate(
+            inputs.input_ids,
+            max_length=max_length,  # Now configurable via CLI
+            # use_cache=True 
+            past_key_values=None
+        )
     print("-" * 20)
 
     # Calculate the number of output tokens

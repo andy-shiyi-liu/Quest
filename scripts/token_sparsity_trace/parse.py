@@ -55,7 +55,7 @@ def parse_output(output_text):
 
     result.update(
         {
-            "output_token_len": int(stats_match.group(2)),
+            "output_seq_len": int(stats_match.group(2)),
         }
     )
 

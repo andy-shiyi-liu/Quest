@@ -115,7 +115,10 @@ PAGE_SIZE = args.page_size
 MAX_SEQ_LEN = args.max_seq_len
 DUMP_N_SAMPLE = args.dump_n_sample
 DATASET = args.dataset
-OUTPUT_DIR = Path(script_dir / args.output_dir / DATASET)
+if Path(args.output_dir).is_absolute():
+    OUTPUT_DIR = Path(args.output_dir)
+else:
+    OUTPUT_DIR = Path(script_dir / args.output_dir / DATASET)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 if __name__ == "__main__":
@@ -127,7 +130,7 @@ if __name__ == "__main__":
 
         model = LlamaForCausalLM.from_pretrained(
             MODEL_PATH, device_map=DEVICE, torch_dtype=DTYPE
-        )
+        ).eval()
         # Initialize Quest Controller with CLI parameters
         model.quest_init(
             page_size=PAGE_SIZE, max_seq_len=MAX_SEQ_LEN, token_budget=args.token_budget
@@ -189,9 +192,11 @@ if __name__ == "__main__":
         # 切换文件条件：达到分片数量且不是最后一个样本
         if current_sample % DUMP_N_SAMPLE == 0 and current_sample < total_samples:
             current_file.close()
+            exit(0)
             file_counter += 1
             current_file = (OUTPUT_DIR / file_template.format(file_counter)).open("w")
 
         if args.method == "quest":
+            print("total_seq_len: ", result["output_seq_len"] + result["input_seq_len"])
             model.quest_clear()
         torch.cuda.empty_cache()

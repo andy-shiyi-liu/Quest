@@ -131,3 +131,5 @@ class KvCache:
     for idx in self._indicies:
       self._pool.free_block(idx)
     self._indicies.clear()
+    self._pool._free = set(range(self._pool.capacity))
+    # self._pool._free = sorted(self._pool._free)
