@@ -41,7 +41,7 @@ parser.add_argument(
     help="Path to pretrained model",
 )
 parser.add_argument(
-    "--device", type=str, default="cuda:0", help="Device to use (e.g., cuda:0, cpu)"
+    "--device", type=str, default="cuda", help="Device to use (e.g., cuda, cpu)"
 )
 parser.add_argument(
     "--dtype",
@@ -52,7 +52,7 @@ parser.add_argument(
 
 # Quest-specific configuration
 parser.add_argument(
-    "--page_size", type=int, default=16, help="Page size for memory management"
+    "--page_size", type=int, default=8, help="Page size for memory management"
 )
 parser.add_argument(
     "--max_seq_len",
@@ -63,7 +63,7 @@ parser.add_argument(
 parser.add_argument(
     "--token_budget",
     type=int,
-    default=1024,
+    default=64,
     help="Token budget for memory allocation",
 )
 
@@ -98,11 +98,19 @@ parser.add_argument(
     default="output",
     help="Directory to save the output JSON file",
 )
+
+# Job control
 parser.add_argument(
-    "--dump_n_sample",
+    "--n_sample",
     type=int,
-    default=100,
+    default=3,
     help="Dump every N samples to a new file",
+)
+parser.add_argument(
+    "--job_id",
+    type=int,
+    default=0,
+    help="Job ID for slurm",
 )
 
 args = parser.parse_args()
@@ -113,15 +121,31 @@ DEVICE = torch.device(args.device)
 DTYPE = args.dtype
 PAGE_SIZE = args.page_size
 MAX_SEQ_LEN = args.max_seq_len
-DUMP_N_SAMPLE = args.dump_n_sample
 DATASET = args.dataset
 if Path(args.output_dir).is_absolute():
     OUTPUT_DIR = Path(args.output_dir)
 else:
-    OUTPUT_DIR = Path(script_dir / args.output_dir / DATASET)
+    OUTPUT_DIR = Path(script_dir / args.output_dir)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+SPARSITY_TRACE_DIR = OUTPUT_DIR / "token-sparsity-traces"
+SPARSITY_TRACE_DIR.mkdir(parents=True, exist_ok=True)
+
+HIDDEN_STATES_DIR = OUTPUT_DIR / "hidden-states"
+HIDDEN_STATES_DIR.mkdir(parents=True, exist_ok=True)
+
+N_SAMPLE = args.n_sample
+JOB_ID = args.job_id
+
 if __name__ == "__main__":
+    dataset = load_dataset(DATASET, "main")
+    dataset = dataset["train"]["question"]
+
+    if N_SAMPLE * (JOB_ID + 1) > len(dataset):
+        # nothing to do
+        exit(0)
+    dataset = dataset[N_SAMPLE * JOB_ID : N_SAMPLE * (JOB_ID + 1)]
+
     torch.set_default_dtype(DTYPE)
     tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 
@@ -142,37 +166,33 @@ if __name__ == "__main__":
         model = LlamaForCausalLM.from_pretrained(
             MODEL_PATH, device_map=DEVICE, torch_dtype=DTYPE
         )
+    
+    model.config.return_dict_in_generate = True
+    assert next(model.parameters()).device.type == "cuda", "模型未加载到 GPU 上！"
 
     # save inference config
-    with open(OUTPUT_DIR / "inference_config.json", "w") as f:
-        json.dump(
-            {
-                "model_path": MODEL_PATH,
-                # "device": DEVICE,
-                # "dtype": DTYPE,
-                "page_size": PAGE_SIZE,
-                "max_seq_len": MAX_SEQ_LEN,
-                "token_budget": args.token_budget,
-                "max_length": args.max_length,
-                "method": args.method,
-                "dataset": DATASET,
-            },
-            f,
-        )
-
-    dataset = load_dataset(DATASET, "main")
-    dataset = dataset["train"]["question"]
+    if not (OUTPUT_DIR / "inference_config.json").exists():
+        with open(OUTPUT_DIR / "inference_config.json", "w") as f:
+            json.dump(
+                {
+                    "model_path": MODEL_PATH,
+                    "dtype": DTYPE,
+                    "page_size": PAGE_SIZE,
+                    "max_seq_len": MAX_SEQ_LEN,
+                    "token_budget": args.token_budget,
+                    "max_length": args.max_length,
+                    "method": args.method,
+                    "dataset": DATASET,
+                },
+                f,
+            )
 
     # 文件管理配置
-    total_samples = len(dataset)
-    current_sample = 0
-    file_counter = 0
     file_template = "traces_{}.json"
 
-    current_file = (OUTPUT_DIR / file_template.format(file_counter)).open("w")
+    current_file = (SPARSITY_TRACE_DIR / file_template.format(JOB_ID)).open("a")
 
-    for prompt in tqdm(dataset):
-        current_sample += 1
+    for idx, prompt in enumerate(tqdm(dataset)):
         buffer = StringIO()
         with redirect_stdout(buffer):
             inference(
@@ -181,6 +201,7 @@ if __name__ == "__main__":
                 prompt=prompt,
                 max_length=args.max_length,
                 device=DEVICE,
+                hidden_output_path=HIDDEN_STATES_DIR / f"hidden_states_{JOB_ID}_{idx}.safetensors"
             )
         output_text = buffer.getvalue()
         # Parse the output
@@ -189,14 +210,9 @@ if __name__ == "__main__":
         # 写入文件
         current_file.write(json.dumps(result) + "\n")
 
-        # 切换文件条件：达到分片数量且不是最后一个样本
-        if current_sample % DUMP_N_SAMPLE == 0 and current_sample < total_samples:
-            current_file.close()
-            exit(0)
-            file_counter += 1
-            current_file = (OUTPUT_DIR / file_template.format(file_counter)).open("w")
-
         if args.method == "quest":
-            print("total_seq_len: ", result["output_seq_len"] + result["input_seq_len"])
+            # print("total_seq_len: ", result["output_seq_len"] + result["input_seq_len"])
             model.quest_clear()
         torch.cuda.empty_cache()
+
+    current_file.close()
