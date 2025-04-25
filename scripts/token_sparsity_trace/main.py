@@ -42,7 +42,6 @@ parser.add_argument(
 )
 parser.add_argument(
     "--device", type=str, default="cuda", help="Device to use (e.g., cuda, cpu)"
-    "--device", type=str, default="cuda", help="Device to use (e.g., cuda, cpu)"
 )
 parser.add_argument(
     "--dtype",
@@ -105,16 +104,9 @@ parser.add_argument(
 # Job control
 parser.add_argument(
     "--n_sample",
-    "--n_sample",
     type=int,
     default=3,
     help="Dump every N samples to a new file",
-)
-parser.add_argument(
-    "--job_id",
-    type=int,
-    default=0,
-    help="Job ID for slurm",
 )
 parser.add_argument(
     "--job_id",
@@ -136,7 +128,6 @@ if Path(args.output_dir).is_absolute():
     OUTPUT_DIR = Path(args.output_dir)
 else:
     OUTPUT_DIR = Path(script_dir / args.output_dir)
-    OUTPUT_DIR = Path(script_dir / args.output_dir)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 SPARSITY_TRACE_DIR = OUTPUT_DIR / "token-sparsity-traces"
@@ -149,13 +140,6 @@ N_SAMPLE = args.n_sample
 JOB_ID = args.job_id
 
 if __name__ == "__main__":
-    dataset = load_dataset(DATASET, "main")
-    dataset = dataset["train"]["question"]
-
-    if N_SAMPLE * (JOB_ID + 1) > len(dataset):
-        # nothing to do
-        exit(0)
-    dataset = dataset[N_SAMPLE * JOB_ID : N_SAMPLE * (JOB_ID + 1)]
 
     dataset = load_dataset(DATASET, "main")
     dataset = dataset["train"]["question"]
@@ -195,7 +179,6 @@ if __name__ == "__main__":
             json.dump(
                 {
                     "model_path": MODEL_PATH,
-                    "dtype": DTYPE,
                     "page_size": PAGE_SIZE,
                     "max_seq_len": MAX_SEQ_LEN,
                     "token_budget": args.token_budget,
@@ -235,5 +218,4 @@ if __name__ == "__main__":
             model.quest_clear()
         torch.cuda.empty_cache()
 
-    current_file.close()
     current_file.close()

@@ -114,7 +114,7 @@ parser.add_argument(
 parser.add_argument(
     "--mem",
     type=str,
-    default="32G",
+    default="200G",
     help="Memory allocation for the job",
 )
 
